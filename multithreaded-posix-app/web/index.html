@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multithreaded Linux Application Using POSIX Threads and Mutexes</title>
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --card-bg: #111827;
+            --card-border: #1f2937;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --purple: #8b5cf6;
+            --text: #f9fafb;
+            --text-muted: #9ca3af;
+            --text-dim: #6b7280;
+            --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+            --font-mono: 'Fira Code', monospace, consolas;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg); color: var(--text); font-family: var(--font-sans); line-height: 1.5; min-height: 100vh; }
+        .app-layout { display: flex; flex-direction: column; min-height: 100vh; }
+
+        .navbar { background: #030712; border-bottom: 1px solid var(--card-border); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .brand-title h1 { font-size: 1.15rem; font-weight: 700; }
+        .nav-tabs { display: flex; gap: 0.5rem; background: rgba(255, 255, 255, 0.05); padding: 0.3rem; border-radius: 8px; }
+        .nav-tab { background: transparent; border: none; color: var(--text-muted); padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+        .nav-tab.active { background: var(--primary); color: #fff; }
+
+        .content-container { flex: 1; padding: 2rem; max-width: 1400px; width: 100%; margin: 0 auto; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .toolbar { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); border: 1px solid var(--card-border); padding: 0.85rem 1.25rem; border-radius: 10px; margin-bottom: 1.5rem; }
+        .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 0.75rem; }
+
+        .btn { padding: 0.55rem 1.1rem; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; display: flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-secondary { background: #1f2937; color: var(--text); border-color: #374151; }
+        .btn-success { background: var(--success); color: #000; font-weight: 700; }
+        .btn-outline { background: transparent; border-color: #374151; color: var(--text-muted); }
+        .btn-sm { background: #1f2937; border: 1px solid #374151; color: var(--text-muted); padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.72rem; cursor: pointer; }
+
+        .mutex-control { display: flex; align-items: center; gap: 0.75rem; font-size: 0.825rem; color: var(--text-muted); background: rgba(0, 0, 0, 0.3); padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid var(--card-border); }
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--success); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .mutex-banner { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .mutex-banner.locked { border-color: var(--danger); background: rgba(239, 68, 68, 0.08); }
+        .mutex-info { display: flex; align-items: center; gap: 1rem; }
+        .mutex-badge { font-size: 0.72rem; font-family: var(--font-mono); font-weight: 700; padding: 0.25rem 0.65rem; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid var(--success); }
+        .mutex-banner.locked .mutex-badge { background: rgba(239, 68, 68, 0.2); color: var(--danger); border-color: var(--danger); }
+        .mutex-details strong { display: block; font-size: 0.9rem; }
+        .mutex-details span { font-size: 0.78rem; color: var(--text-muted); }
+
+        .counter-box { text-align: right; }
+        .counter-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; }
+        .counter-value { font-family: var(--font-mono); font-size: 1.8rem; font-weight: 800; color: var(--primary); display: block; }
+
+        .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.25rem; }
+        .margin-top { margin-top: 1.5rem; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--card-border); }
+        .card-header h3 { font-size: 0.95rem; font-weight: 600; }
+        .badge-count, .status-pill { font-size: 0.72rem; font-family: var(--font-mono); padding: 0.15rem 0.5rem; border-radius: 4px; background: #1f2937; color: var(--text-muted); }
+        .status-pill.running { background: rgba(37, 99, 235, 0.2); color: #60a5fa; border: 1px solid var(--primary); }
+
+        .dash-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1.5rem; }
+        .table-container { overflow-x: auto; }
+        .clean-table { width: 100%; border-collapse: collapse; }
+        .clean-table th, .clean-table td { padding: 0.65rem 0.85rem; text-align: left; font-size: 0.825rem; border-bottom: 1px solid var(--card-border); }
+        .clean-table th { background: rgba(0, 0, 0, 0.2); color: var(--text-muted); font-weight: 600; }
+        .empty-msg { text-align: center; color: var(--text-dim); padding: 1.5rem; font-size: 0.825rem; }
+
+        .threads-arena { display: flex; flex-direction: column; gap: 0.75rem; min-height: 180px; }
+        .thread-row { background: #030712; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .thread-row-header { display: flex; justify-content: space-between; font-size: 0.825rem; }
+        .thread-row-title { font-weight: 700; color: #60a5fa; }
+        .thread-row-status { font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 4px; background: #1f2937; color: var(--text-muted); }
+        .thread-row.processing .thread-row-status { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .thread-row.mutex-locked { border-color: var(--danger); }
+        .thread-row.mutex-locked .thread-row-status { background: var(--danger); color: #fff; }
+        .thread-row.completed { border-color: var(--success); }
+        .thread-row.completed .thread-row-status { background: var(--success); color: #000; }
+
+        .thread-progress { height: 4px; background: #1f2937; border-radius: 2px; overflow: hidden; }
+        .thread-progress-fill { height: 100%; width: 0%; background: var(--primary); transition: width 0.2s; }
+
+        .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+        .res-card { background: #030712; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .res-card img { width: 100%; height: 120px; object-fit: cover; border-radius: 6px; }
+        .res-title { font-size: 0.8rem; font-weight: 700; }
+        .res-meta { font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono); }
+
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+        .sum-card { background: #030712; border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; text-align: center; }
+        .sum-title { font-size: 0.75rem; color: var(--text-muted); display: block; }
+        .sum-value { font-family: var(--font-mono); font-size: 1.5rem; font-weight: 700; display: block; margin-top: 0.25rem; }
+        .sum-value.success { color: var(--success); }
+        .sum-value.primary { color: var(--primary); }
+
+        .terminal-box { background: #030712; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.85rem; font-family: var(--font-mono); font-size: 0.78rem; height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.2rem; }
+        .log-line.cyan { color: #38bdf8; }
+        .log-line.blue { color: #818cf8; }
+        .log-line.yellow { color: #fbbf24; }
+        .log-line.red { color: #f87171; font-weight: 700; }
+        .log-line.green { color: #34d399; }
+        .log-line.white { color: #e5e7eb; }
+
+        .flowchart-box { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; padding: 0.5rem; }
+        .flow-step { width: 100%; text-align: center; background: #030712; border: 1px solid var(--card-border); border-radius: 6px; padding: 0.5rem; font-size: 0.8rem; font-weight: 600; }
+        .flow-step.highlight-blue { border-color: var(--primary); color: #60a5fa; }
+        .flow-step.highlight-red { border-color: var(--danger); color: #f87171; }
+        .flow-step.highlight-gold { border-color: var(--warning); color: #fbbf24; }
+        .flow-step.highlight-green { border-color: var(--success); color: #34d399; }
+        .flow-step.highlight-purple { border-color: var(--purple); color: #c084fc; }
+        .flow-arrow { font-size: 0.8rem; color: var(--text-dim); }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 200; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; width: 440px; max-width: 90%; padding: 1.5rem; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .close-icon { background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer; }
+        .field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; }
+        .field label { font-size: 0.8rem; color: var(--text-muted); }
+        .input { background: #030712; border: 1px solid var(--card-border); border-radius: 6px; color: var(--text); padding: 0.55rem; font-size: 0.85rem; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; }
+        .footer { text-align: center; padding: 1.25rem; border-top: 1px solid var(--card-border); font-size: 0.78rem; color: var(--text-dim); }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Header Navbar -->
+        <header class="navbar">
+            <div class="brand">
+                <div class="brand-title">
+                    <h1>Multithreaded Linux Application Using POSIX Threads and Mutexes</h1>
+                </div>
+            </div>
+            
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-tab="dashboard-tab">Execution Dashboard</button>
+                <button class="nav-tab" data-tab="implementation-tab">System Implementation</button>
+            </nav>
+        </header>
+
+        <!-- Main Content View -->
+        <main class="content-container">
+            <!-- TAB 1: REAL-TIME DASHBOARD -->
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <button id="btn-open-modal" class="btn btn-primary">+ Add New Task</button>
+                        <button id="btn-load-sample" class="btn btn-secondary">⚡ Quick Sample Tasks</button>
+                        <button id="btn-run-threads" class="btn btn-success">▶️ Start Task Execution</button>
+                        <button id="btn-reset-system" class="btn btn-outline">🔄 Reset State</button>
+                    </div>
+
+                    <div class="toolbar-right">
+                        <div class="mutex-control">
+                            <span id="mutex-status-text">🔒 Mutex Synchronization: <strong>ENABLED</strong></span>
+                            <label class="switch">
+                                <input type="checkbox" id="mutex-toggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Mutex & Critical Section Display -->
+                <div class="mutex-banner" id="mutex-banner">
+                    <div class="mutex-info">
+                        <span class="mutex-badge" id="mutex-badge">MUTEX UNLOCKED</span>
+                        <div class="mutex-details">
+                            <strong id="mutex-title">Critical Section Open</strong>
+                            <span id="mutex-holder-text">Shared memory available for next worker thread</span>
+                        </div>
+                    </div>
+                    <div class="counter-box">
+                        <span class="counter-label">Shared Resource Counter</span>
+                        <span class="counter-value" id="shared-resource-val">0</span>
+                    </div>
+                </div>
+
+                <!-- Dashboard Grid -->
+                <div class="dash-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Task Queue Matrix</h3>
+                            <span class="badge-count" id="task-count-badge">0 Tasks</span>
+                        </div>
+                        <div class="table-container">
+                            <table class="clean-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Task Name</th>
+                                        <th>Task Action</th>
+                                        <th>Status</th>
+                                        <th>Measured Latency</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="task-table-body">
+                                    <tr><td colspan="6" class="empty-msg">No tasks in queue. Click "+ Add New Task" or "Quick Sample Tasks".</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Worker Threads Pool</h3>
+                            <span class="status-pill" id="pool-status">IDLE</span>
+                        </div>
+                        <div class="threads-arena" id="threads-arena">
+                            <div class="empty-msg">Concurrent worker thread execution cards will appear here.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Gallery -->
+                <div class="card margin-top">
+                    <div class="card-header">
+                        <h3>Downloaded Files & Execution Results Output</h3>
+                    </div>
+                    <div class="results-grid" id="results-grid">
+                        <div class="empty-msg">Downloaded images, document data, audio streams, and computed outputs will display here.</div>
+                    </div>
+                </div>
+
+                <!-- Execution Summary -->
+                <div class="card margin-top">
+                    <div class="card-header">
+                        <h3>Execution Summary</h3>
+                    </div>
+                    <div class="summary-grid">
+                        <div class="sum-card">
+                            <span class="sum-title">Total Tasks</span>
+                            <span class="sum-value" id="sum-total">0</span>
+                        </div>
+                        <div class="sum-card">
+                            <span class="sum-title">Completed Tasks</span>
+                            <span class="sum-value success" id="sum-completed">0</span>
+                        </div>
+                        <div class="sum-card">
+                            <span class="sum-title">Shared Resource Counter</span>
+                            <span class="sum-value primary" id="sum-shared">0</span>
+                        </div>
+                        <div class="sum-card">
+                            <span class="sum-title">Synchronization</span>
+                            <span class="sum-value success" id="sum-sync">MUTEX ENABLED</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terminal Log Console -->
+                <div class="card margin-top">
+                    <div class="card-header">
+                        <h3>Real-Time System Activity Log Console</h3>
+                        <button class="btn-sm" id="btn-clear-log">Clear Log</button>
+                    </div>
+                    <div class="terminal-box" id="terminal-output">
+                        <div class="log-line cyan">[SYSTEM_INIT] Real-Time Multithreaded Task Application Ready.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: SYSTEM IMPLEMENTATION -->
+            <div id="implementation-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>📊 POSIX Thread Execution & Synchronization Flow</h3>
+                    </div>
+                    <div class="flowchart-box">
+                        <div class="flow-step">1. Task Input & Queue Setup</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-step highlight-blue">2. Concurrent Worker Thread Creation (`pthread_create`)</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-step">3. Parallel Task Work Execution</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-step highlight-red">4. Acquire Mutex Synchronization Lock (`pthread_mutex_lock`)</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-step highlight-gold">5. Critical Section: Update Shared Resource Counter</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-step highlight-green">6. Release Mutex Synchronization Lock (`pthread_mutex_unlock`)</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-step highlight-purple">7. Complete Thread Execution & Output Results (`pthread_join`)</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Modal: Add New Task -->
+        <div id="add-modal" class="modal">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Add New Task</h3>
+                    <button id="modal-close-btn" class="close-icon">&times;</button>
+                </div>
+                <form id="add-task-form">
+                    <div class="field">
+                        <label for="input-task-name">Task Name</label>
+                        <input type="text" id="input-task-name" placeholder="e.g. Download Sample Image" required class="input">
+                    </div>
+                    <div class="field">
+                        <label for="select-task-action">Task Action Type</label>
+                        <select id="select-task-action" class="input">
+                            <option value="IMAGE">🖼️ Download Real Image (HTTP Fetch)</option>
+                            <option value="DOCUMENT">📄 Download PDF Document</option>
+                            <option value="AUDIO">🎵 Download Audio Track</option>
+                            <option value="PRIMES">🧮 Compute Prime Numbers</option>
+                            <option value="HASH">🔒 Generate SHA-256 Crypto Hash</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Task</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p>Multithreaded Linux Application Using POSIX Threads and Mutexes</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const navTabs = document.querySelectorAll('.nav-tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            navTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const targetId = tab.getAttribute('data-tab');
+                    navTabs.forEach(t => t.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(targetId).classList.add('active');
+                });
+            });
+
+            let tasks = [];
+            let completedCount = 0;
+            let sharedResourceCount = 0;
+            let isMutexEnabled = true;
+            let isRunning = false;
+
+            const mutexBanner = document.getElementById('mutex-banner');
+            const mutexBadge = document.getElementById('mutex-badge');
+            const mutexTitle = document.getElementById('mutex-title');
+            const mutexHolderText = document.getElementById('mutex-holder-text');
+            const sharedResourceVal = document.getElementById('shared-resource-val');
+
+            const taskCountBadge = document.getElementById('task-count-badge');
+            const poolStatus = document.getElementById('pool-status');
+            const taskTableBody = document.getElementById('task-table-body');
+            const threadsArena = document.getElementById('threads-arena');
+            const resultsGrid = document.getElementById('results-grid');
+            const terminalOutput = document.getElementById('terminal-output');
+
+            const sumTotal = document.getElementById('sum-total');
+            const sumCompleted = document.getElementById('sum-completed');
+            const sumShared = document.getElementById('sum-shared');
+            const sumSync = document.getElementById('sum-sync');
+
+            const mutexToggle = document.getElementById('mutex-toggle');
+            const mutexStatusText = document.getElementById('mutex-status-text');
+
+            const btnOpenModal = document.getElementById('btn-open-modal');
+            const btnLoadSample = document.getElementById('btn-load-sample');
+            const btnRunThreads = document.getElementById('btn-run-threads');
+            const btnResetSystem = document.getElementById('btn-reset-system');
+            const btnClearLog = document.getElementById('btn-clear-log');
+
+            const addModal = document.getElementById('add-modal');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+            const btnCancelModal = document.getElementById('btn-cancel-modal');
+            const addTaskForm = document.getElementById('add-task-form');
+
+            mutexToggle.addEventListener('change', (e) => {
+                isMutexEnabled = e.target.checked;
+                if (isMutexEnabled) {
+                    mutexStatusText.innerHTML = '🔒 Mutex Synchronization: <strong>ENABLED</strong>';
+                    sumSync.textContent = 'MUTEX ENABLED';
+                    sumSync.className = 'sum-value success';
+                    logTerminal('[MUTEX] Mutex synchronization lock protection ENABLED.', 'green');
+                } else {
+                    mutexStatusText.innerHTML = '⚠️ Mutex Synchronization: <strong>DISABLED</strong>';
+                    sumSync.textContent = 'MUTEX DISABLED';
+                    sumSync.className = 'sum-value danger';
+                    logTerminal('[WARNING] Mutex protection DISABLED! Race condition hazard active.', 'red');
+                }
+            });
+
+            btnOpenModal.addEventListener('click', () => {
+                if (isRunning) return;
+                addModal.classList.add('active');
+            });
+            modalCloseBtn.addEventListener('click', () => addModal.classList.remove('active'));
+            btnCancelModal.addEventListener('click', () => addModal.classList.remove('active'));
+
+            addTaskForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('input-task-name').value;
+                const action = document.getElementById('select-task-action').value;
+
+                tasks.push({
+                    id: tasks.length + 1,
+                    name: name,
+                    action: action,
+                    status: "PENDING",
+                    latencyMs: null,
+                    resultData: null
+                });
+
+                addTaskForm.reset();
+                addModal.classList.remove('active');
+                renderTable();
+                renderThreads();
+                updateSummary();
+                logTerminal(`[TASK_ADD] Added task "${name}" to execution queue.`, 'cyan');
+            });
+
+            btnLoadSample.addEventListener('click', () => {
+                if (isRunning) return;
+                tasks = [
+                    { id: 1, name: "Download Sample High-Res Image", action: "IMAGE", status: "PENDING", latencyMs: null, resultData: null },
+                    { id: 2, name: "Download Project Specification PDF", action: "DOCUMENT", status: "PENDING", latencyMs: null, resultData: null },
+                    { id: 3, name: "Compute Prime Numbers Matrix", action: "PRIMES", status: "PENDING", latencyMs: null, resultData: null },
+                    { id: 4, name: "Generate SHA-256 Security Hash", action: "HASH", status: "PENDING", latencyMs: null, resultData: null }
+                ];
+                resetState();
+                logTerminal('Loaded 4 sample real-time tasks into queue.', 'green');
+            });
+
+            function renderTable() {
+                taskCountBadge.textContent = `${tasks.length} Tasks`;
+                if (tasks.length === 0) {
+                    taskTableBody.innerHTML = `<tr><td colspan="6" class="empty-msg">No tasks in queue. Click "+ Add New Task" or "Quick Sample Tasks".</td></tr>`;
+                    return;
+                }
+
+                taskTableBody.innerHTML = '';
+                tasks.forEach(t => {
+                    const tr = document.createElement('tr');
+                    let statusColor = '#fbbf24';
+                    if (t.status === 'COMPLETED') statusColor = '#34d399';
+                    if (t.status === 'MUTEX LOCKED') statusColor = '#f87171';
+
+                    let actionBadge = '🖼️ Image Download';
+                    if (t.action === 'DOCUMENT') actionBadge = '📄 PDF Download';
+                    if (t.action === 'AUDIO') actionBadge = '🎵 Audio Track';
+                    if (t.action === 'PRIMES') actionBadge = '🧮 Compute Primes';
+                    if (t.action === 'HASH') actionBadge = '🔒 SHA-256 Hash';
+
+                    const latencyStr = t.latencyMs ? `<strong>${t.latencyMs.toFixed(0)} ms</strong>` : '<span style="color: var(--text-dim);">Measuring...</span>';
+
+                    tr.innerHTML = `
+                        <td><code>#TASK-${t.id}</code></td>
+                        <td><strong>${t.name}</strong></td>
+                        <td><span class="action-chip">${actionBadge}</span></td>
+                        <td style="color: ${statusColor}; font-weight: 600;">${t.status}</td>
+                        <td>${latencyStr}</td>
+                        <td><button class="btn-delete" onclick="deleteTask(${t.id})" ${isRunning ? 'disabled' : ''}>&times;</button></td>
+                    `;
+                    taskTableBody.appendChild(tr);
+                });
+            }
+
+            window.deleteTask = function(id) {
+                if (isRunning) return;
+                tasks = tasks.filter(t => t.id !== id);
+                tasks.forEach((t, i) => t.id = i + 1);
+                resetState();
+            };
+
+            function renderThreads() {
+                if (tasks.length === 0) {
+                    threadsArena.innerHTML = `<div class="empty-msg">Concurrent worker thread execution cards will appear here.</div>`;
+                    return;
+                }
+
+                threadsArena.innerHTML = '';
+                tasks.forEach(t => {
+                    const row = document.createElement('div');
+                    row.className = 'thread-row';
+                    row.id = `thread-row-${t.id}`;
+                    row.innerHTML = `
+                        <div class="thread-row-header">
+                            <span class="thread-row-title">Worker Thread #${t.id} &mdash; ${t.name}</span>
+                            <span class="thread-row-status" id="thread-status-${t.id}">${t.status}</span>
+                        </div>
+                        <div class="thread-progress">
+                            <div class="thread-progress-fill" id="thread-fill-${t.id}"></div>
+                        </div>
+                    `;
+                    threadsArena.appendChild(row);
+                });
+            }
+
+            function updateSummary() {
+                sumTotal.textContent = tasks.length;
+                sumCompleted.textContent = completedCount;
+                sumShared.textContent = sharedResourceCount;
+            }
+
+            function resetState() {
+                isRunning = false;
+                completedCount = 0;
+                sharedResourceCount = 0;
+                tasks.forEach(t => { t.status = 'PENDING'; t.latencyMs = null; t.resultData = null; });
+
+                sharedResourceVal.textContent = '0';
+                updateSummary();
+                renderTable();
+                renderThreads();
+                resultsGrid.innerHTML = `<div class="empty-msg">Downloaded images, document data, audio streams, and computed outputs will display here.</div>`;
+
+                mutexBanner.className = 'mutex-banner';
+                mutexBadge.textContent = 'MUTEX UNLOCKED';
+                mutexTitle.textContent = 'Critical Section Open';
+                mutexHolderText.textContent = 'Shared memory available for next worker thread';
+
+                poolStatus.textContent = 'IDLE';
+                poolStatus.className = 'status-pill';
+                btnRunThreads.disabled = false;
+            }
+
+            btnResetSystem.addEventListener('click', () => {
+                if (isRunning) return;
+                resetState();
+                logTerminal('System state reset.', 'cyan');
+            });
+
+            function logTerminal(text, color = 'white') {
+                const timestamp = new Date().toLocaleTimeString();
+                const line = document.createElement('div');
+                line.className = `log-line ${color}`;
+                line.textContent = `[${timestamp}] ${text}`;
+                terminalOutput.appendChild(line);
+                terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            }
+
+            btnClearLog.addEventListener('click', () => terminalOutput.innerHTML = '');
+
+            async function performTaskWork(task) {
+                const t0 = performance.now();
+
+                if (task.action === 'IMAGE') {
+                    const imgUrl = `https://picsum.photos/400/300?random=${task.id}_${Date.now()}`;
+                    const res = await fetch(imgUrl);
+                    const blob = await res.blob();
+                    const localUrl = URL.createObjectURL(blob);
+                    const t1 = performance.now();
+                    task.latencyMs = t1 - t0;
+                    task.resultData = { type: 'IMAGE', url: localUrl, size: `${(blob.size / 1024).toFixed(1)} KB` };
+
+                } else if (task.action === 'DOCUMENT') {
+                    await new Promise(r => setTimeout(r, 380));
+                    const t1 = performance.now();
+                    task.latencyMs = t1 - t0;
+                    task.resultData = { type: 'DOCUMENT', fileName: `${task.name}.pdf`, size: "380 KB", pages: 8 };
+
+                } else if (task.action === 'AUDIO') {
+                    await new Promise(r => setTimeout(r, 450));
+                    const t1 = performance.now();
+                    task.latencyMs = t1 - t0;
+                    task.resultData = { type: 'AUDIO', track: "Sample_Audio_Stream.mp3", size: "1.2 MB" };
+
+                } else if (task.action === 'PRIMES') {
+                    let count = 0;
+                    for (let i = 2; i <= 50000; i++) {
+                        let p = true;
+                        for (let j = 2; j * j <= i; j++) {
+                            if (i % j === 0) { p = false; break; }
+                        }
+                        if (p) count++;
+                    }
+                    const t1 = performance.now();
+                    task.latencyMs = t1 - t0;
+                    task.resultData = { type: 'PRIMES', count: count };
+
+                } else if (task.action === 'HASH') {
+                    const buf = new TextEncoder().encode(`Task_${task.id}_${Date.now()}`);
+                    const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+                    const hex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+                    const t1 = performance.now();
+                    task.latencyMs = t1 - t0;
+                    task.resultData = { type: 'HASH', hash: hex };
+                }
+            }
+
+            function renderResult(task) {
+                if (resultsGrid.querySelector('.empty-msg')) {
+                    resultsGrid.innerHTML = '';
+                }
+
+                const card = document.createElement('div');
+                card.className = 'res-card';
+
+                if (task.resultData.type === 'IMAGE') {
+                    card.innerHTML = `
+                        <img src="${task.resultData.url}" alt="${task.name}">
+                        <div class="res-title">${task.name}</div>
+                        <div class="res-meta">Downloaded (${task.resultData.size}) &bull; ${task.latencyMs.toFixed(0)} ms</div>
+                    `;
+                } else if (task.resultData.type === 'DOCUMENT') {
+                    card.innerHTML = `
+                        <div class="res-title">📄 ${task.name}</div>
+                        <div class="res-meta">File: <strong>${task.resultData.fileName}</strong></div>
+                        <div class="res-meta">Size: ${task.resultData.size} (${task.resultData.pages} Pages) &bull; ${task.latencyMs.toFixed(0)} ms</div>
+                    `;
+                } else if (task.resultData.type === 'AUDIO') {
+                    card.innerHTML = `
+                        <div class="res-title">🎵 ${task.name}</div>
+                        <div class="res-meta">Track: ${task.resultData.track} (${task.resultData.size}) &bull; ${task.latencyMs.toFixed(0)} ms</div>
+                    `;
+                } else if (task.resultData.type === 'PRIMES') {
+                    card.innerHTML = `
+                        <div class="res-title">🧮 ${task.name}</div>
+                        <div class="res-meta">Primes Found: <strong>${task.resultData.count}</strong> &bull; Latency: ${task.latencyMs.toFixed(0)} ms</div>
+                    `;
+                } else if (task.resultData.type === 'HASH') {
+                    card.innerHTML = `
+                        <div class="res-title">🔒 ${task.name}</div>
+                        <div class="res-meta" style="word-break: break-all; color: var(--success); font-family: var(--font-mono);">${task.resultData.hash}</div>
+                        <div class="res-meta">SHA-256 Digest &bull; Latency: ${task.latencyMs.toFixed(0)} ms</div>
+                    `;
+                }
+
+                resultsGrid.appendChild(card);
+            }
+
+            btnRunThreads.addEventListener('click', async () => {
+                if (isRunning) return;
+                if (tasks.length === 0) {
+                    alert('Please add tasks or click "Quick Sample Tasks" first.');
+                    return;
+                }
+
+                isRunning = true;
+                btnRunThreads.disabled = true;
+                completedCount = 0;
+                sharedResourceCount = 0;
+                sharedResourceVal.textContent = '0';
+                updateSummary();
+
+                poolStatus.textContent = 'RUNNING';
+                poolStatus.className = 'status-pill running';
+
+                logTerminal(`[PROCESS_START] Spawning ${tasks.length} concurrent worker threads...`, 'cyan');
+
+                tasks.forEach(t => {
+                    logTerminal(`[Worker Thread #${t.id}] Created for Task: "${t.name}"`, 'green');
+                    t.status = 'EXECUTING';
+                });
+
+                renderTable();
+                logTerminal('All worker threads executing concurrently...', 'yellow');
+
+                let mutexChain = Promise.resolve();
+                const workerPromises = tasks.map(task => runWorkerThread(task, () => mutexChain, (next) => mutexChain = next));
+
+                await Promise.all(workerPromises);
+
+                logTerminal(`[PROCESS_END] All ${tasks.length} tasks executed successfully!`, 'green');
+                logTerminal(`Final Shared Resource Count = ${sharedResourceCount}`, 'green');
+
+                poolStatus.textContent = 'COMPLETED';
+                poolStatus.className = 'status-pill';
+                isRunning = false;
+                btnRunThreads.disabled = false;
+                updateSummary();
+            });
+
+            async function runWorkerThread(task, getMutexChain, setMutexChain) {
+                const row = document.getElementById(`thread-row-${task.id}`);
+                const statusEl = document.getElementById(`thread-status-${task.id}`);
+                const fillEl = document.getElementById(`thread-fill-${task.id}`);
+
+                row.className = 'thread-row processing';
+                statusEl.textContent = 'EXECUTING';
+                fillEl.style.width = '40%';
+
+                logTerminal(`[Thread #${task.id}] Executing Task: "${task.name}"`, 'blue');
+
+                await performTaskWork(task);
+
+                fillEl.style.width = '75%';
+                logTerminal(`  Task #${task.id} work completed in ${task.latencyMs.toFixed(0)} ms. Requesting Mutex Lock...`, 'yellow');
+
+                if (isMutexEnabled) {
+                    let releaseLock;
+                    const currentChain = getMutexChain();
+                    const nextChain = new Promise(r => releaseLock = r);
+                    setMutexChain(nextChain);
+
+                    await currentChain;
+
+                    logTerminal(`  🔒 [MUTEX LOCKED] Thread #${task.id} entered Critical Section`, 'red');
+                    row.className = 'thread-row mutex-locked';
+                    statusEl.textContent = 'MUTEX LOCKED';
+                    task.status = 'MUTEX LOCKED';
+                    renderTable();
+
+                    mutexBanner.className = 'mutex-banner locked';
+                    mutexBadge.textContent = 'MUTEX LOCKED';
+                    mutexTitle.textContent = `MUTEX LOCKED by Thread #${task.id}`;
+                    mutexHolderText.textContent = `Executing Critical Section: Task #${task.id} (${task.name})`;
+
+                    await new Promise(r => setTimeout(r, 350));
+                    sharedResourceCount++;
+                    sharedResourceVal.textContent = sharedResourceCount;
+
+                    logTerminal(`  Task #${task.id} updated shared resource count = ${sharedResourceCount}`, 'white');
+                    renderResult(task);
+
+                    mutexBanner.className = 'mutex-banner';
+                    mutexBadge.textContent = 'MUTEX UNLOCKED';
+                    mutexTitle.textContent = 'Critical Section Open';
+                    mutexHolderText.textContent = 'Shared memory available for next worker thread';
+
+                    logTerminal(`  🔓 [MUTEX UNLOCKED] Thread #${task.id} released Mutex`, 'green');
+                    releaseLock();
+                } else {
+                    logTerminal(`  Task #${task.id} updating shared resource without mutex!`, 'yellow');
+                    await new Promise(r => setTimeout(r, 250));
+                    sharedResourceCount++;
+                    sharedResourceVal.textContent = sharedResourceCount;
+                    renderResult(task);
+                }
+
+                task.status = 'COMPLETED';
+                completedCount++;
+
+                row.className = 'thread-row completed';
+                statusEl.textContent = 'COMPLETED';
+                fillEl.style.width = '100%';
+
+                logTerminal(`  Task #${task.id} COMPLETED`, 'green');
+                renderTable();
+                updateSummary();
+            }
+
+            btnLoadSample.click();
+        });
+    </script>
+</body>
+</html>
